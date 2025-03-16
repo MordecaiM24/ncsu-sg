@@ -21,6 +21,22 @@ creds = Credentials.from_service_account_file(CREDS_FILE, scopes=SCOPES)
 drive_service = build("drive", "v3", credentials=creds)
 
 
+GOOGLE_MIME_TYPES = {
+    "application/vnd.google-apps.document": {
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "pdf": "application/pdf",
+    },
+    "application/vnd.google-apps.spreadsheet": {
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "pdf": "application/pdf",
+    },
+    "application/vnd.google-apps.presentation": {
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "pdf": "application/pdf",
+    },
+}
+
+
 def list_files_in_folder_via_search(folder_id):
     logging.info(f"Searching for files in folder ID: {folder_id}")
     files = []
@@ -58,11 +74,11 @@ def list_files_in_folder_via_search(folder_id):
     return files
 
 
-def download_file(file_id, file_name, dest_dir):
+def download_regular_file(file_id, file_name, dest_dir):
     file_path = os.path.join(dest_dir, file_name)
     os.makedirs(dest_dir, exist_ok=True)
 
-    logging.info(f"Downloading file: {file_name}")
+    logging.info(f"Downloading regular file: {file_name}")
 
     try:
         request = drive_service.files().get_media(fileId=file_id)
@@ -74,9 +90,58 @@ def download_file(file_id, file_name, dest_dir):
                 logging.info(f"    Download progress: {int(status.progress() * 100)}%")
 
         logging.info(f"Downloaded: {file_name} -> {file_path}")
+        return True
 
     except Exception as e:
         logging.error(f"Error downloading file {file_name}: {e}")
+        return False
+
+
+def export_google_doc(file_id, file_name, mime_type, dest_dir, export_format):
+
+    base_name = os.path.splitext(file_name)[0]
+    export_file_name = f"{base_name}.{export_format}"
+    file_path = os.path.join(dest_dir, export_file_name)
+
+    logging.info(f"Exporting Google {export_format} file: {export_file_name}")
+
+    try:
+        export_mime = GOOGLE_MIME_TYPES[mime_type][export_format]
+        request = drive_service.files().export_media(
+            fileId=file_id, mimeType=export_mime
+        )
+
+        with open(file_path, "wb") as f:
+            downloader = MediaIoBaseDownload(f, request)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+                logging.info(
+                    f"    Export progress ({export_format}): {int(status.progress() * 100)}%"
+                )
+
+        logging.info(f"Exported: {export_file_name} -> {file_path}")
+        return True
+
+    except Exception as e:
+        logging.error(f"Error exporting {export_format} for {file_name}: {e}")
+        return False
+
+
+def download_file(file_id, file_name, mime_type, dest_dir):
+    os.makedirs(dest_dir, exist_ok=True)
+
+    if mime_type in GOOGLE_MIME_TYPES:
+        logging.info(f"Processing Google Docs file: {file_name} (ID: {file_id})")
+
+        # exporting in both formats bc of varying flexibility in md export
+        export_formats = list(GOOGLE_MIME_TYPES[mime_type].keys())
+        for export_format in export_formats:
+            export_google_doc(file_id, file_name, mime_type, dest_dir, export_format)
+
+        return True
+    else:
+        return download_regular_file(file_id, file_name, dest_dir)
 
 
 def download_folder_via_search(folder_id, dest_dir):
@@ -92,7 +157,7 @@ def download_folder_via_search(folder_id, dest_dir):
             logging.info(f"Entering subfolder: {file['name']} (ID: {file['id']})")
             download_folder_via_search(file["id"], subfolder_path)
         else:
-            download_file(file["id"], file["name"], dest_dir)
+            download_file(file["id"], file["name"], file["mimeType"], dest_dir)
 
 
 if __name__ == "__main__":
