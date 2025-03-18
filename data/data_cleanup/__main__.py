@@ -26,14 +26,32 @@ def clean_and_convert_to_json(file_path, legislative_id, session, version, filen
     result_match = re.search(r"\*\*Result:\*\* (.*?)\n", clean_text)
 
     whereas_clauses = re.findall(
-        r"^\*\*\s*WHEREAS,?\*\*\s*(.*?);", clean_text, re.MULTILINE
+        r"^\*\*.*WHEREAS,?\*\*,?\s*(.*?);", clean_text, re.MULTILINE
     )
     enacted_clauses = re.findall(
-        r"^\*\*\s*ENACTED,?\*\*\s*(.*?);", clean_text, re.MULTILINE
+        r"^\*\*.*ENACTED,?\*\*,?\s*(.*?);", clean_text, re.MULTILINE
     )
     resolved_clauses = re.findall(
-        r"^\*\*\s*RESOLVED,?\*\*\s*(.*?);", clean_text, re.MULTILINE
+        r"^\*\*.*RESOLVED,?\*\*,?\s*(.*?);", clean_text, re.MULTILINE
     )
+
+    whereas_full = re.findall(
+        r"(^\*\*\s*WHEREAS,?\*\*,?.*?;)", clean_text, re.MULTILINE
+    )
+    enacted_full = re.findall(r"(^\*\*.*ENACTED,?\*\*,?.*?;)", clean_text, re.MULTILINE)
+    resolved_full = re.findall(
+        r"(^\*\*.*RESOLVED,?\*\*,?.*?;)", clean_text, re.MULTILINE
+    )
+
+    full_text_parts = []
+    if whereas_full:
+        full_text_parts.extend(whereas_full)
+    if enacted_full:
+        full_text_parts.extend(enacted_full)
+    if resolved_full:
+        full_text_parts.extend(resolved_full)
+
+    full_text = "\n".join(full_text_parts).strip()
 
     data = {
         "id": f"{legislative_id}_{session}_{version}".lower(),
@@ -58,6 +76,7 @@ def clean_and_convert_to_json(file_path, legislative_id, session, version, filen
         "whereas_clauses": whereas_clauses,
         "enacted_clauses": enacted_clauses,
         "resolved_clauses": resolved_clauses,
+        "full_text": full_text,
         "filename": filename,
         "session": session,
     }
