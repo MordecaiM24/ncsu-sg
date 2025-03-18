@@ -91,7 +91,7 @@ def map_drive_folder(folder_id, folder_path="", mapping=None):
 
     for file in files:
         if file["mimeType"] == "application/vnd.google-apps.folder":
-            subfolder_name = file["name"]
+            subfolder_name = file["name"].replace(" ", "_")
             subfolder_path = os.path.join(folder_path, subfolder_name)
 
             map_drive_folder(file["id"], subfolder_path, mapping)
@@ -104,7 +104,7 @@ def map_drive_folder(folder_id, folder_path="", mapping=None):
 
             file_info = {
                 "id": file["id"],
-                "name": file["name"],
+                "name": file["name"].replace(" ", "_"),
                 "mimeType": file["mimeType"],
                 "modifiedTime": file["modifiedTime"],
             }
@@ -172,6 +172,7 @@ def export_google_doc(file_id, file_name, mime_type, dest_dir, export_format):
 
     base_name = os.path.splitext(file_name)[0]
     export_file_name = f"{base_name}.{export_format}"
+    export_file_name = export_file_name.replace(" ", "_")
     file_path = os.path.join(dest_dir, export_file_name)
 
     logging.info(f"Exporting Google {export_format} file: {export_file_name}")
@@ -244,7 +245,7 @@ def process_mapping(drive_mapping, local_files, base_dir=DOWNLOAD_DIR):
 
         for file_info in folder_data["files"]:
             file_id = file_info["id"]
-            file_name = file_info["name"]
+            file_name = file_info["name"].replace(" ", "_")
             mime_type = file_info["mimeType"]
 
             if mime_type in GOOGLE_MIME_TYPES:
