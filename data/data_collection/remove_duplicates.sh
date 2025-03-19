@@ -12,3 +12,8 @@ find "$TARGET_DIR" -type f -name '*\(2\)*' -exec rm -v {} \;
 find "$TARGET_DIR" -type f -name '*\(3\)*' -exec rm -v {} \;
 
 echo "Deletion complete."
+
+rm -rf ../data_cleanup/converted_docs
+cp -r "$TARGET_DIR" ../data_cleanup/converted_docs
+
+echo "$1 moved to ../data_cleanup."
