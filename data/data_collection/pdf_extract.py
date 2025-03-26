@@ -3,7 +3,7 @@ import re
 import json
 
 INPUT_DIR = "./downloaded_docs"
-OUTPUT_DIR = "./pdfs"
+OUTPUT_DIR = "../aws/pdfs"
 
 
 def get_version_from_filename(filename):
