@@ -19,7 +19,7 @@ async def root():
 
 @app.get("/health/{txt}")
 async def health(txt):
-    return health(txt)
+    return {"text": txt}
 
 
 @app.post("/doc-retrieval/")
