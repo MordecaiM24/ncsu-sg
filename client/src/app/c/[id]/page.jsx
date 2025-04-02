@@ -2,8 +2,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Search, FileText, ArrowUp, Calendar, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import Markdown from "react-markdown";
-import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import { useRouter, useParams } from "next/navigation";
+import { saveChat, getChat } from "@/lib/db"; // Import our database functions
 
 function ChatUI() {
   const [docSearch, setDocSearch] = useState(false);
@@ -12,12 +13,55 @@ function ChatUI() {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
   const [hiddenContext, setHiddenContext] = useState("");
+  const [savedDocuments, setSavedDocuments] = useState([]);
 
   const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
   const messagesEndRef = useRef(null);
 
   const router = useRouter();
+  const params = useParams();
+  const chatId = params?.id;
+
+  useEffect(() => {
+    const loadChatData = async () => {
+      if (chatId) {
+        try {
+          const chatData = await getChat(chatId);
+          if (chatData) {
+            setMessages(chatData.messages || []);
+            setHiddenContext(chatData.hiddenContext || "");
+            setSavedDocuments(chatData.documents || []);
+          }
+        } catch (error) {
+          console.error("Error loading chat:", error);
+        }
+      }
+    };
+
+    loadChatData();
+  }, [chatId]);
+
+  useEffect(() => {
+    const saveChatData = async () => {
+      if (
+        chatId &&
+        (messages.length > 0 || hiddenContext || savedDocuments.length > 0)
+      ) {
+        try {
+          await saveChat(chatId, {
+            messages,
+            hiddenContext,
+            documents: savedDocuments,
+          });
+        } catch (error) {
+          console.error("Error saving chat:", error);
+        }
+      }
+    };
+
+    saveChatData();
+  }, [chatId, messages, hiddenContext, savedDocuments]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -88,6 +132,8 @@ function ChatUI() {
       });
 
       const response = await res.json();
+
+      setSavedDocuments((prev) => [...prev, ...response.result]);
 
       const newContext = response.result.reduce((acc, doc) => {
         return doc.full_text ? acc + doc.full_text + "\n" : acc;
@@ -164,13 +210,17 @@ function ChatUI() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-between bg-black p-4 text-white">
+    <div className="flex min-h-screen flex-col items-center justify-between bg-black p-4 pt-16 text-white">
       <div className="flex min-h-full w-full max-w-3xl flex-col gap-y-8 pb-20">
         {messages.map((message, idx) => {
           return message.role === "user" ? (
             <UserMessage content={message.content} key={idx} />
           ) : (
-            <AssistantMessage content={message.content} key={idx} />
+            <AssistantMessage
+              content={message.content}
+              documents={savedDocuments}
+              key={idx}
+            />
           );
         })}
         <div ref={messagesEndRef} />
@@ -241,13 +291,13 @@ function ChatUI() {
 
 function UserMessage({ content }) {
   return (
-    <div className="ml-auto max-w-[66.666667%] rounded-xl rounded-br-none bg-zinc-800/50 p-4 text-lg text-white">
+    <div className="ml-auto max-w-[66.666667%] rounded-xl rounded-br-none bg-zinc-800/50 p-4 py-3 text-lg text-white">
       <p className="whitespace-normal break-words">{content}</p>
     </div>
   );
 }
 
-function AssistantMessage({ content }) {
+function AssistantMessage({ content, documents }) {
   const isJsonContent = typeof content === "object" && content !== null;
   const isLoadingMessage =
     content === "Getting more information to answer your question...\n\n";
@@ -283,11 +333,34 @@ function AssistantMessage({ content }) {
   }
 
   return (
-    <div className="max-w-full rounded p-4 text-white">
-      <div className="whitespace-normal break-words text-lg">
-        <Markdown>
+    <div className="max-w-full rounded p-4 text-gray-100">
+      <div className="text-lg">
+        <ReactMarkdown
+          components={{
+            ul: ({ node, ...props }) => (
+              <ul
+                style={{
+                  display: "block",
+                  listStyleType: "disc",
+                  paddingInlineStart: "40px",
+                }}
+                {...props}
+              />
+            ),
+            ol: ({ node, ...props }) => (
+              <ol
+                style={{
+                  display: "block",
+                  listStyleType: "decimal",
+                  paddingInlineStart: "40px",
+                }}
+                {...props}
+              />
+            ),
+          }}
+        >
           {typeof content === "string" ? content : JSON.stringify(content)}
-        </Markdown>
+        </ReactMarkdown>
       </div>
     </div>
   );

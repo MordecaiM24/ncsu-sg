@@ -89,50 +89,26 @@
   }
 }
 
-.box {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 12px;
-  /* Remove fixed dimensions to allow any size */
-  position: relative;
-  border-radius: 12px;
-  isolation: isolate; /* Create a new stacking context */
-}
-
-.box::before {
-  content: "";
-  position: absolute;
-  inset: 0; /* Cover the entire element */
-  border-radius: inherit;
-  padding: 3px; /* Border width */
-  background: conic-gradient(from var(--angle), #fff, 10%, #c00);
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: 8s rotate linear infinite;
-  z-index: -1;
-}
-
-.box::after {
-  content: "";
-  position: absolute;
-  inset: 3px; /* Border width */
-  background: #131219;
-  border-radius: calc(12px - 3px); /* Adjust border-radius */
-  z-index: -1;
-}
-
-@keyframes rotate {
-  to {
-    --angle: 360deg;
+@layer base {
+  :root {
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
-}
 
-@property --angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
+  .dark {
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
 }
