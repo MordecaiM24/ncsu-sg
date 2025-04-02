@@ -1,0 +1,9 @@
+POST http://localhost:8000/doc-retrieval/ 
+Content-Type: application/json
+
+{
+    "query": "Who is the treasurer?",
+    "top_k": 2
+}
+
+###
