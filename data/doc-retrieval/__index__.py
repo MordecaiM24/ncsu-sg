@@ -59,10 +59,8 @@ async def claude_stream(payload: dict):
                 query = messages[0]["content"]
                 results = retrieve(query, k=3)
 
-                # create content array with documents and citation enabled
                 content = []
 
-                # add retrieved documents with citations enabled
                 for doc in results:
                     doc_id = doc.id
                     file_path = f"cleaned_json/{doc_id}.json"
@@ -84,10 +82,8 @@ async def claude_stream(payload: dict):
                                 }
                             )
 
-                # add user query as text
                 content.append({"type": "text", "text": query})
 
-                # create augmented messages with structured content
                 augmented_messages = [{"role": "user", "content": content}]
                 augmented_messages.extend(messages[1:])
 
