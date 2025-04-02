@@ -1,11 +1,12 @@
 from fastapi import FastAPI
-from retrieval import retrieve, health
+from retrieval import retrieve
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import json
 import os.path
 import anthropic
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -32,16 +33,75 @@ anthropic_client = anthropic.Anthropic(
 
 @app.post("/claude-stream")
 async def claude_stream(payload: dict):
-    messages = payload.get("messages", [{"role": "user", "content": "hello"}])
+    messages = payload.get("messages", [{"role": "user", "content": "placeholder"}])
 
-    def generate():
-        with anthropic_client.messages.stream(
-            max_tokens=1024, messages=messages, model="claude-3-7-sonnet-20250219"
-        ) as stream:
-            for text in stream.text_stream:
-                yield text  # streaming each chunk
+    if "Context" in messages[0]["content"]:
 
-    return StreamingResponse(generate(), media_type="text/plain")
+        def generate():
+            try:
+                with anthropic_client.messages.stream(
+                    max_tokens=1024,
+                    messages=messages,
+                    model="claude-3-5-haiku-20241022",
+                ) as stream:
+                    for text in stream.text_stream:
+                        yield text
+            except Exception as e:
+                yield f"\n\nError during streaming: {str(e)}"
+
+    else:
+
+        def generate():
+            try:
+                yield "Getting more information to answer your question...\n\n"
+                time.sleep(5)
+
+                query = messages[0]["content"]
+                results = retrieve(query, k=3)
+
+                # create content array with documents and citation enabled
+                content = []
+
+                # add retrieved documents with citations enabled
+                for doc in results:
+                    doc_id = doc.id
+                    file_path = f"cleaned_json/{doc_id}.json"
+                    if os.path.exists(file_path):
+                        with open(file_path, "r") as f:
+                            doc_json = json.load(f)
+                            full_text = doc_json.get("full_text", "")
+
+                            content.append(
+                                {
+                                    "type": "document",
+                                    "source": {
+                                        "type": "text",
+                                        "media_type": "text/plain",
+                                        "data": full_text,
+                                    },
+                                    "title": f"Document {doc_id}",
+                                    "citations": {"enabled": True},
+                                }
+                            )
+
+                # add user query as text
+                content.append({"type": "text", "text": query})
+
+                # create augmented messages with structured content
+                augmented_messages = [{"role": "user", "content": content}]
+                augmented_messages.extend(messages[1:])
+
+                with anthropic_client.messages.stream(
+                    max_tokens=1024,
+                    messages=augmented_messages,
+                    model="claude-3-5-haiku-20241022",
+                ) as stream:
+                    for text in stream.text_stream:
+                        yield text
+            except Exception as e:
+                yield f"\n\nError during streaming: {str(e)}"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 class DocQuery(BaseModel):
