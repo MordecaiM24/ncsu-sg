@@ -5,9 +5,11 @@ import { cn } from "@/lib/utils";
 
 const ChatUI = () => {
   const [docSearch, setDocSearch] = useState(false);
+  const [topK, setTopK] = useState(2);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
+  const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
   const messagesEndRef = useRef(null);
 
@@ -46,7 +48,7 @@ const ChatUI = () => {
     try {
       const res = await fetch("http://localhost:8000/doc-retrieval", {
         method: "POST",
-        body: JSON.stringify({ query, top_k: 4 }),
+        body: JSON.stringify({ query, top_k: topK }),
         headers: {
           "Content-Type": "application/json",
         },
@@ -109,6 +111,20 @@ const ChatUI = () => {
               }}
             />
             <div className="flex items-center space-x-2">
+              {docSearch && (
+                <select
+                  className="text rounded border border-zinc-700 bg-zinc-900 p-1 text-white outline-none"
+                  value={topK}
+                  onChange={(e) => setTopK(Number(e.target.value))}
+                >
+                  {arr.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               <button
                 type="button"
                 className={cn(
