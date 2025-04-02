@@ -1,29 +1,30 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Search, PenLine, FileText, Layers, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { v4 } from "uuid";
 
 const HomeUI = () => {
   const [docSearch, setDocSearch] = useState(false);
-  const [ask, setAsk] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState();
 
-  async function getDocuments() {
-    setLoading(true);
+  const router = useRouter();
 
-    const res = await fetch(`http://localhost:8000/doc-retrieval/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: prompt, top_k: 3 }),
-    });
+  useEffect(() => {
+    const existingPrompt = window.localStorage.getItem("prompt");
+    console.log(existingPrompt);
 
-    const response = await res.json();
+    if (existingPrompt !== "" && existingPrompt !== null) {
+      setPrompt(existingPrompt);
+    }
+  }, []);
 
-    console.log(response);
-    setResponse(response);
-    setLoading(false);
+  async function onSubmit() {
+    window.localStorage.setItem("prompt", "");
+    window.localStorage.setItem("transferPrompt", prompt);
+    const uuid = v4();
+    router.push(`c/${uuid}`);
   }
 
   return (
@@ -35,37 +36,24 @@ const HomeUI = () => {
           <form
             className="flex items-center rounded-full bg-zinc-900 p-3 pl-6"
             onSubmit={(e) => {
-              console.log("submitted");
               e.preventDefault();
-              getDocuments();
+              console.log("submitted");
+              onSubmit();
             }}
           >
             <input
+              autoFocus
               type="text"
               placeholder="Ask anything"
               className="flex-grow bg-transparent px-2 text-white outline-none"
               value={prompt}
               onChange={(e) => {
                 setPrompt(e.target.value);
-                console.log(prompt);
+                window.localStorage.setItem("prompt", e.target.value);
               }}
             />
 
             <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                className={cn(
-                  "flex items-center space-x-1 rounded-full px-3 py-2 transition-all duration-75",
-                  ask
-                    ? "border border-blue-500 bg-blue-500/50 text-blue-100"
-                    : "border border-zinc-800 bg-zinc-800",
-                )}
-                onClick={() => setAsk((ask) => !ask)}
-              >
-                <Search size={16} />
-                <span className="text-sm">Ask</span>
-              </button>
-
               <button
                 type="button"
                 className={cn(
@@ -81,9 +69,9 @@ const HomeUI = () => {
               </button>
 
               <button
-                disabled={loading}
+                disabled={!prompt.trim()}
                 type="submit"
-                className="flex items-center rounded-full bg-white p-2 text-black transition-all hover:cursor-pointer hover:bg-slate-200 active:bg-slate-300 disabled:text-slate-400"
+                className="flex items-center rounded-full bg-white p-2 text-black transition-all hover:cursor-pointer hover:bg-slate-200 active:bg-slate-300 disabled:cursor-default disabled:text-slate-500 disabled:opacity-25"
               >
                 <ArrowUp size={18} />
               </button>
@@ -123,8 +111,6 @@ const HomeUI = () => {
           </button>
         </div>
       </div>
-
-      <p>{JSON.stringify(response)}</p>
     </div>
   );
 };
