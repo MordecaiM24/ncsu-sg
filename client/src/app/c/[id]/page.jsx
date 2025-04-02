@@ -2,59 +2,97 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Search, FileText, ArrowUp, Calendar, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Markdown from "react-markdown";
+import { useRouter } from "next/navigation";
 
-const ChatUI = () => {
+function ChatUI() {
   const [docSearch, setDocSearch] = useState(false);
   const [topK, setTopK] = useState(2);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [hiddenContext, setHiddenContext] = useState("");
+
   const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
   const messagesEndRef = useRef(null);
+
+  const router = useRouter();
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        router.push("/");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [router]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
-    const existingPrompt = window.localStorage.getItem("transferPrompt");
-    window.localStorage.setItem("transferPrompt", "");
-    if (existingPrompt !== null && existingPrompt !== "") {
-      setLoading(true);
+    const existingPrompt = window.sessionStorage.getItem("transferPrompt");
+    const type = window.sessionStorage.getItem("type");
 
-      setMessages([{ role: "user", content: existingPrompt }]);
-
-      getDocuments(existingPrompt);
-
-      setLoading(false);
+    if (existingPrompt === null || existingPrompt === "") {
+      return;
     }
+
+    setLoading(true);
+    setMessages([{ role: "user", content: existingPrompt }]);
+
+    if (type !== null && type == "docSearch") {
+      const k = window.sessionStorage.getItem("top_k");
+      getDocuments(existingPrompt, k);
+    } else {
+      sendToClaude(existingPrompt);
+    }
+
+    window.sessionStorage.removeItem("top_k");
+    window.sessionStorage.removeItem("transferPrompt");
+    window.sessionStorage.removeItem("type");
+
+    setLoading(false);
   }, []);
 
   async function handleSubmit() {
     if (!prompt.trim()) return;
-
     setMessages((prev) => [...prev, { role: "user", content: prompt }]);
-
     setPrompt("");
     setLoading(true);
 
-    getDocuments(prompt);
+    if (docSearch) {
+      await getDocuments(prompt, topK);
+    } else {
+      await sendToClaude(prompt);
+    }
 
     setLoading(false);
   }
 
-  async function getDocuments(query) {
+  async function getDocuments(query, top_k) {
+    setDocSearch(false);
+
     try {
       const res = await fetch("http://localhost:8000/doc-retrieval", {
         method: "POST",
-        body: JSON.stringify({ query, top_k: topK }),
+        body: JSON.stringify({ query, top_k }),
         headers: {
           "Content-Type": "application/json",
         },
       });
 
       const response = await res.json();
+
+      const newContext = response.result.reduce((acc, doc) => {
+        return doc.full_text ? acc + doc.full_text + "\n" : acc;
+      }, "");
+      setHiddenContext((prev) => prev + newContext);
 
       setMessages((prev) => [
         ...prev,
@@ -64,13 +102,62 @@ const ChatUI = () => {
         },
       ]);
     } catch (error) {
-      console.error("Error fetching documents:", error);
+      console.error("error fetching documents:", error);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           content:
-            "Sorry, there was an error retrieving documents. Please try again later.",
+            "sorry, there was an error retrieving documents. please try again later.",
+        },
+      ]);
+    }
+  }
+
+  async function sendToClaude(query) {
+    let combinedPrompt;
+
+    if (hiddenContext.length !== 0) {
+      combinedPrompt = `Context: ${hiddenContext}\n\n${query}`;
+    } else {
+      combinedPrompt = query;
+    }
+
+    try {
+      let streamedContent = "";
+
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      const response = await fetch("http://localhost:8000/claude-stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: combinedPrompt }],
+        }),
+      });
+
+      if (!response.body) throw new Error("no body in stream");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        streamedContent += text;
+        setMessages((prev) => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: streamedContent },
+        ]);
+      }
+    } catch (err) {
+      console.error("error calling claude:", err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "yeah so claude's not vibing rn. try again later.",
         },
       ]);
     }
@@ -78,7 +165,7 @@ const ChatUI = () => {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-between bg-black p-4 text-white">
-      <div className="flex min-h-full w-full max-w-3xl flex-col gap-y-8">
+      <div className="flex min-h-full w-full max-w-3xl flex-col gap-y-8 pb-20">
         {messages.map((message, idx) => {
           return message.role === "user" ? (
             <UserMessage content={message.content} key={idx} />
@@ -88,13 +175,12 @@ const ChatUI = () => {
         })}
         <div ref={messagesEndRef} />
       </div>
-      <div className="mt-16 flex w-full max-w-3xl flex-col items-center">
-        <div className="mb-6 w-full">
+      <div className="fixed bottom-0 left-0 right-0 z-10 bg-black/80 px-4 py-4 backdrop-blur-sm">
+        <div className="mx-auto max-w-3xl">
           <form
-            className="sitcky flex items-center rounded-full bg-zinc-900 p-3 pl-6"
+            className="flex items-center rounded-full bg-zinc-900 p-3 pl-6"
             onSubmit={(e) => {
               e.preventDefault();
-              console.log("submitted");
               handleSubmit();
             }}
           >
@@ -107,7 +193,6 @@ const ChatUI = () => {
               onChange={(e) => {
                 setPrompt(e.target.value);
                 window.localStorage.setItem("prompt", e.target.value);
-                console.log(prompt);
               }}
             />
             <div className="flex items-center space-x-2">
@@ -152,11 +237,11 @@ const ChatUI = () => {
       </div>
     </div>
   );
-};
+}
 
 function UserMessage({ content }) {
   return (
-    <div className="ml-auto max-w-[66.666667%] rounded-xl rounded-br-none bg-zinc-800/50 p-4 text-white">
+    <div className="ml-auto max-w-[66.666667%] rounded-xl rounded-br-none bg-zinc-800/50 p-4 text-lg text-white">
       <p className="whitespace-normal break-words">{content}</p>
     </div>
   );
@@ -164,6 +249,21 @@ function UserMessage({ content }) {
 
 function AssistantMessage({ content }) {
   const isJsonContent = typeof content === "object" && content !== null;
+  const isLoadingMessage =
+    content === "Getting more information to answer your question...\n\n";
+
+  if (isLoadingMessage) {
+    return (
+      <div className="max-w-[66.666667%] rounded p-4 text-white">
+        <p
+          className="animate-shimmer whitespace-normal break-words bg-gradient-to-r from-transparent via-white/80 via-50% to-transparent bg-[length:400px_100%] bg-clip-text bg-[0_0] text-white/50"
+          style={{ "--shimmer-width": "400px" }}
+        >
+          {content}
+        </p>
+      </div>
+    );
+  }
 
   if (isJsonContent && content.result) {
     return (
@@ -183,13 +283,16 @@ function AssistantMessage({ content }) {
   }
 
   return (
-    <div className="max-w-[66.666667%] rounded p-4 text-white">
-      <p className="whitespace-normal break-words">
-        {typeof content === "string" ? content : JSON.stringify(content)}
-      </p>
+    <div className="max-w-full rounded p-4 text-white">
+      <div className="whitespace-normal break-words text-lg">
+        <Markdown>
+          {typeof content === "string" ? content : JSON.stringify(content)}
+        </Markdown>
+      </div>
     </div>
   );
 }
+
 const DocumentCard = ({ document }) => {
   const { id, metadata, page_content, type } = document;
 
@@ -222,7 +325,7 @@ const DocumentCard = ({ document }) => {
             <span className="font-medium">{metadata.short_title || id}</span>
           </div>
           <div className="rounded bg-zinc-600 px-2 py-1 text-xs">
-            {type || "Document"}
+            {"Legislation"}
           </div>
         </div>
 
@@ -253,7 +356,7 @@ const DocumentCard = ({ document }) => {
         </div>
 
         <div className="bg-zinc-900 p-2 text-center text-xs text-gray-400">
-          <span>PDF Document</span>
+          <span>PDF </span>
         </div>
       </div>
     </a>
