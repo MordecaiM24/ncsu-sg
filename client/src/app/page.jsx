@@ -1,15 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import {
-  Search,
-  PenLine,
-  FileText,
-  Layers,
-  ArrowUp,
-  Home,
-  Clock,
-  Trash,
-} from "lucide-react";
+import { PenLine, FileText, Layers, ArrowUp, Clock, Trash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { v4 } from "uuid";

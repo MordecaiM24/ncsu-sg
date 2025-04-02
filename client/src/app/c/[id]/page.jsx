@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { Search, FileText, ArrowUp, Calendar, Users } from "lucide-react";
+import { FileText, ArrowUp, Calendar, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { useRouter, useParams } from "next/navigation";
-import { saveChat, getChat } from "@/lib/db"; // Import our database functions
+import { saveChat, getChat } from "@/lib/db";
 
 function ChatUI() {
   const [docSearch, setDocSearch] = useState(false);
@@ -102,6 +102,7 @@ function ChatUI() {
     window.sessionStorage.removeItem("type");
 
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleSubmit() {
@@ -297,7 +298,7 @@ function UserMessage({ content }) {
   );
 }
 
-function AssistantMessage({ content, documents }) {
+function AssistantMessage({ content }) {
   const isJsonContent = typeof content === "object" && content !== null;
   const isLoadingMessage =
     content === "Getting more information to answer your question...\n\n";
@@ -337,7 +338,7 @@ function AssistantMessage({ content, documents }) {
       <div className="text-lg">
         <ReactMarkdown
           components={{
-            ul: ({ node, ...props }) => (
+            ul: ({ ...props }) => (
               <ul
                 style={{
                   display: "block",
@@ -347,7 +348,7 @@ function AssistantMessage({ content, documents }) {
                 {...props}
               />
             ),
-            ol: ({ node, ...props }) => (
+            ol: ({ ...props }) => (
               <ol
                 style={{
                   display: "block",
@@ -367,7 +368,7 @@ function AssistantMessage({ content, documents }) {
 }
 
 const DocumentCard = ({ document }) => {
-  const { id, metadata, page_content, type } = document;
+  const { id, metadata, page_content } = document;
 
   const documentUrl = `https://ncsu-sg.s3.us-east-1.amazonaws.com/${id}.pdf`;
 
