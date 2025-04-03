@@ -16,12 +16,11 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 app = FastAPI()
 
-origins = ["https://sg.m16b.com", "http://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
