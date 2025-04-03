@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import Logo from "@/components/logo";
 import MobileModal from "@/components/mobile-modal";
 import { ThemeProvider } from "@/components/theme-provider";
 
