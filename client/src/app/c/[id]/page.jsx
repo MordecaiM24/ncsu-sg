@@ -124,13 +124,16 @@ function ChatUI() {
     setDocSearch(false);
 
     try {
-      const res = await fetch(`${NEXT_PUBLIC_API_ENDPOINT}/doc-retrieval`, {
-        method: "POST",
-        body: JSON.stringify({ query, top_k }),
-        headers: {
-          "Content-Type": "application/json",
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_ENDPOINT}/doc-retrieval`,
+        {
+          method: "POST",
+          body: JSON.stringify({ query, top_k }),
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
 
       const response = await res.json();
 
@@ -176,7 +179,7 @@ function ChatUI() {
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
       const response = await fetch(
-        `${NEXT_PUBLIC_API_ENDPOINT}/claude-stream`,
+        `${process.env.NEXT_PUBLIC_API_ENDPOINT}/claude-stream`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
