@@ -124,7 +124,7 @@ function ChatUI() {
     setDocSearch(false);
 
     try {
-      const res = await fetch("http://localhost:8000/doc-retrieval", {
+      const res = await fetch(`${NEXT_PUBLIC_API_ENDPOINT}/doc-retrieval`, {
         method: "POST",
         body: JSON.stringify({ query, top_k }),
         headers: {
@@ -175,13 +175,16 @@ function ChatUI() {
 
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
-      const response = await fetch("http://localhost:8000/claude-stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: combinedPrompt }],
-        }),
-      });
+      const response = await fetch(
+        `${NEXT_PUBLIC_API_ENDPOINT}/claude-stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: combinedPrompt }],
+          }),
+        },
+      );
 
       if (!response.body) throw new Error("no body in stream");
 
