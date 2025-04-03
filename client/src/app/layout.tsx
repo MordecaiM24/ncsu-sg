@@ -38,7 +38,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Logo />
+          {/* <Logo /> */}
           <MobileModal />
           {children}
         </ThemeProvider>
