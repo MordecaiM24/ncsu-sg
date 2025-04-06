@@ -12,7 +12,7 @@ function ChatUI() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [hiddenContext, setHiddenContext] = useState("");
+  const [activeDocIds, setActiveDocIds] = useState([]);
   const [savedDocuments, setSavedDocuments] = useState([]);
 
   const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -30,7 +30,7 @@ function ChatUI() {
           const chatData = await getChat(chatId);
           if (chatData) {
             setMessages(chatData.messages || []);
-            setHiddenContext(chatData.hiddenContext || "");
+            setActiveDocIds(chatData.activeDocIds || []);
             setSavedDocuments(chatData.documents || []);
           }
         } catch (error) {
@@ -46,12 +46,14 @@ function ChatUI() {
     const saveChatData = async () => {
       if (
         chatId &&
-        (messages.length > 0 || hiddenContext || savedDocuments.length > 0)
+        (messages.length > 0 ||
+          activeDocIds.length > 0 ||
+          savedDocuments.length > 0)
       ) {
         try {
           await saveChat(chatId, {
             messages,
-            hiddenContext,
+            activeDocIds,
             documents: savedDocuments,
           });
         } catch (error) {
@@ -61,7 +63,7 @@ function ChatUI() {
     };
 
     saveChatData();
-  }, [chatId, messages, hiddenContext, savedDocuments]);
+  }, [chatId, messages, activeDocIds, savedDocuments]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -92,7 +94,7 @@ function ChatUI() {
 
     if (type !== null && type == "docSearch") {
       const k = window.sessionStorage.getItem("top_k");
-      getDocuments(existingPrompt, k);
+      handleDocumentSearch(existingPrompt, k);
     } else {
       sendToClaude(existingPrompt);
     }
@@ -112,20 +114,26 @@ function ChatUI() {
     setLoading(true);
 
     if (docSearch) {
-      await getDocuments(prompt, topK);
+      await handleDocumentSearch(prompt, topK);
+    } else if (activeDocIds.length > 0) {
+      // This is a follow-up question about specific documents
+      await sendDocumentQuestion(prompt, activeDocIds);
     } else {
+      // General question
       await sendToClaude(prompt);
     }
 
     setLoading(false);
   }
 
-  async function getDocuments(query, top_k) {
+  async function handleDocumentSearch(query, top_k) {
     setDocSearch(false);
+    // Reset active documents when starting a new search
+    setActiveDocIds([]);
 
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_ENDPOINT}/doc-retrieval`,
+        `${process.env.NEXT_PUBLIC_API_ENDPOINT}/doc-retrieval/`,
         {
           method: "POST",
           body: JSON.stringify({ query, top_k }),
@@ -137,12 +145,10 @@ function ChatUI() {
 
       const response = await res.json();
 
-      setSavedDocuments((prev) => [...prev, ...response.result]);
-
-      const newContext = response.result.reduce((acc, doc) => {
-        return doc.full_text ? acc + doc.full_text + "\n" : acc;
-      }, "");
-      setHiddenContext((prev) => prev + newContext);
+      // Store documents if we got summaries
+      if (response.type === "summaries" && response.results) {
+        setSavedDocuments((prev) => [...prev, ...response.results]);
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -152,27 +158,19 @@ function ChatUI() {
         },
       ]);
     } catch (error) {
-      console.error("error fetching documents:", error);
+      console.error("Error fetching documents:", error);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           content:
-            "sorry, there was an error retrieving documents. please try again later.",
+            "Sorry, there was an error retrieving documents. Please try again later.",
         },
       ]);
     }
   }
 
-  async function sendToClaude(query) {
-    let combinedPrompt;
-
-    if (hiddenContext.length !== 0) {
-      combinedPrompt = `Context: ${hiddenContext}\n\n${query}`;
-    } else {
-      combinedPrompt = query;
-    }
-
+  async function sendDocumentQuestion(query, docIds) {
     try {
       let streamedContent = "";
 
@@ -184,12 +182,13 @@ function ChatUI() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: [{ role: "user", content: combinedPrompt }],
+            messages: [{ role: "user", content: query }],
+            doc_ids: docIds,
           }),
         },
       );
 
-      if (!response.body) throw new Error("no body in stream");
+      if (!response.body) throw new Error("No body in stream");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
@@ -205,20 +204,120 @@ function ChatUI() {
         ]);
       }
     } catch (err) {
-      console.error("error calling claude:", err);
+      console.error("Error calling Claude:", err);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: "yeah so claude's not vibing rn. try again later.",
+          content:
+            "Sorry, there was an error connecting to Claude. Please try again later.",
         },
       ]);
     }
   }
 
+  async function sendToClaude(query) {
+    try {
+      let streamedContent = "";
+
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_ENDPOINT}/claude-stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: query }],
+            // Don't include doc_id for general questions
+          }),
+        },
+      );
+
+      if (!response.body) throw new Error("No body in stream");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        streamedContent += text;
+        setMessages((prev) => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: streamedContent },
+        ]);
+      }
+    } catch (err) {
+      console.error("Error calling Claude:", err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Yeah so Claude's not vibing rn. Try again later.",
+        },
+      ]);
+    }
+  }
+
+  // Handle selecting a document to ask questions about
+  function handleSelectDocument(docId) {
+    // Toggle document selection
+    setActiveDocIds((prev) => {
+      if (prev.includes(docId)) {
+        return prev.filter((id) => id !== docId);
+      } else {
+        return [...prev, docId];
+      }
+    });
+  }
+
+  // Handle going back to general questions
+  function handleClearActiveDocs() {
+    setActiveDocIds([]);
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-between bg-black p-4 pt-16 text-white">
       <div className="flex min-h-full w-full max-w-3xl flex-col gap-y-8 pb-20">
+        {activeDocIds.length > 0 && (
+          <div className="rounded-lg border border-blue-800 bg-blue-900/30 px-4 py-2 text-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <span className="font-medium text-blue-300">
+                  Document Mode:{" "}
+                </span>
+                <span>
+                  {activeDocIds.length === 1
+                    ? savedDocuments.find((d) => d.id === activeDocIds[0])
+                        ?.metadata?.short_title || activeDocIds[0]
+                    : `${activeDocIds.length} documents selected`}
+                </span>
+                {activeDocIds.length > 1 && (
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {activeDocIds.map((docId) => (
+                      <span
+                        key={docId}
+                        className="rounded bg-blue-800/40 px-2 py-0.5 text-xs"
+                      >
+                        {savedDocuments.find((d) => d.id === docId)?.metadata
+                          ?.short_title || docId}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleClearActiveDocs}
+                className="ml-3 rounded bg-blue-800 px-2 py-1 text-xs hover:bg-blue-700"
+              >
+                Exit Document Mode
+              </button>
+            </div>
+          </div>
+        )}
+
         {messages.map((message, idx) => {
           return message.role === "user" ? (
             <UserMessage content={message.content} key={idx} />
@@ -226,6 +325,8 @@ function ChatUI() {
             <AssistantMessage
               content={message.content}
               documents={savedDocuments}
+              activeDocIds={activeDocIds} // added this line
+              onSelectDocument={handleSelectDocument}
               key={idx}
             />
           );
@@ -244,7 +345,15 @@ function ChatUI() {
             <input
               autoFocus
               type="text"
-              placeholder="Ask anything"
+              placeholder={
+                activeDocIds.length > 0
+                  ? activeDocIds.length === 1
+                    ? "Ask about this document..."
+                    : `Ask about these ${activeDocIds.length} documents...`
+                  : docSearch
+                    ? "Search for legislation..."
+                    : "Ask anything"
+              }
               className="flex-grow bg-transparent px-2 text-white outline-none"
               value={prompt}
               onChange={(e) => {
@@ -267,19 +376,21 @@ function ChatUI() {
                 </select>
               )}
 
-              <button
-                type="button"
-                className={cn(
-                  "flex items-center space-x-1 rounded-full bg-zinc-800 px-3 py-2 duration-75",
-                  docSearch
-                    ? "border border-blue-500 bg-blue-500/50 text-blue-100"
-                    : "border border-zinc-800 bg-zinc-800",
-                )}
-                onClick={() => setDocSearch((docSearch) => !docSearch)}
-              >
-                <FileText size={16} />
-                <span className="text-sm">Document Search</span>
-              </button>
+              {activeDocIds.length === 0 && (
+                <button
+                  type="button"
+                  className={cn(
+                    "flex items-center space-x-1 rounded-full bg-zinc-800 px-3 py-2 duration-75",
+                    docSearch
+                      ? "border border-blue-500 bg-blue-500/50 text-blue-100"
+                      : "border border-zinc-800 bg-zinc-800",
+                  )}
+                  onClick={() => setDocSearch((docSearch) => !docSearch)}
+                >
+                  <FileText size={16} />
+                  <span className="text-sm">Document Search</span>
+                </button>
+              )}
 
               <button
                 disabled={loading || !prompt.trim()}
@@ -304,10 +415,17 @@ function UserMessage({ content }) {
   );
 }
 
-function AssistantMessage({ content }) {
+function AssistantMessage({
+  content,
+  documents,
+  activeDocIds,
+  onSelectDocument,
+}) {
   const isJsonContent = typeof content === "object" && content !== null;
   const isLoadingMessage =
-    content === "Getting more information to answer your question...\n\n";
+    content === "Getting more information to answer your question...\n\n" ||
+    content === "Searching for relevant legislation...\n\n" ||
+    content === "Getting detailed information about this document...\n\n";
 
   if (isLoadingMessage) {
     return (
@@ -322,6 +440,53 @@ function AssistantMessage({ content }) {
     );
   }
 
+  // Handle summary search results
+  if (isJsonContent && content.type === "summaries" && content.results) {
+    return (
+      <div className="max-w-full rounded p-4 text-white">
+        <div className="mb-4">
+          <p className="mb-2 text-sm text-gray-400">
+            Found {content.results.length} relevant documents:
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            {content.results.map((doc, index) => (
+              <DocumentCard
+                key={index}
+                document={doc}
+                activeDocIds={activeDocIds}
+                onSelect={() => onSelectDocument(doc.id)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle chunk search results (document-specific)
+  if (isJsonContent && content.type === "chunks" && content.chunks) {
+    return (
+      <div className="max-w-full rounded p-4 text-white">
+        <div className="mb-4">
+          <p className="mb-2 text-sm text-gray-400">
+            Found {content.chunks.length} relevant sections in this document:
+          </p>
+          <div className="space-y-4">
+            {content.chunks.map((chunk, index) => (
+              <div
+                key={index}
+                className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4"
+              >
+                <p className="text-sm text-gray-200">{chunk.content}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Display old-style result format for backward compatibility
   if (isJsonContent && content.result) {
     return (
       <div className="max-w-full rounded p-4 text-white">
@@ -331,7 +496,12 @@ function AssistantMessage({ content }) {
           </p>
           <div className="grid grid-cols-2 gap-4">
             {content.result.map((doc, index) => (
-              <DocumentCard key={index} document={doc} />
+              <DocumentCard
+                key={index}
+                document={doc}
+                activeDocIds={activeDocIds}
+                onSelect={() => onSelectDocument(doc.id)}
+              />
             ))}
           </div>
         </div>
@@ -373,8 +543,11 @@ function AssistantMessage({ content }) {
   );
 }
 
-const DocumentCard = ({ document }) => {
-  const { id, metadata, page_content } = document;
+const DocumentCard = ({ document, activeDocIds = [], onSelect }) => {
+  // Support both new and old API response formats
+  const id = document.id;
+  const metadata = document.metadata;
+  const page_content = document.page_content || document.summary || "";
 
   const documentUrl = `https://ncsu-sg.s3.us-east-1.amazonaws.com/${id}.pdf`;
 
@@ -391,22 +564,37 @@ const DocumentCard = ({ document }) => {
       : metadata.sponsors
     : [];
 
+  const handleClick = (e) => {
+    // If user clicks on PDF link, don't trigger document selection
+    if (e.target.closest(".pdf-link")) {
+      return;
+    }
+    e.preventDefault();
+    onSelect(id);
+  };
+
+  // Check if this document is currently active/selected
+  const isActive = activeDocIds.includes(id);
+
+  // Determine document type display - keeping only Legislation active
+  const docType = "Legislation";
+
   return (
-    <a
-      href={documentUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="hover:scale-102 mb-4 block w-full max-w-sm cursor-pointer transition-all duration-200 hover:shadow-lg"
-    >
-      <div className="overflow-hidden rounded-xl border border-zinc-700 bg-zinc-800">
+    <div className="mb-4 block w-full max-w-sm cursor-pointer transition-all duration-200 hover:shadow-lg">
+      <div
+        className={`overflow-hidden rounded-xl border ${
+          isActive
+            ? "border-blue-500 bg-blue-900/20"
+            : "border-zinc-700 bg-zinc-800 hover:border-blue-500"
+        }`}
+        onClick={handleClick}
+      >
         <div className="flex items-center justify-between bg-zinc-700 p-3">
           <div className="flex items-center">
             <FileText size={18} className="mr-2 text-blue-400" />
             <span className="font-medium">{metadata.short_title || id}</span>
           </div>
-          <div className="rounded bg-zinc-600 px-2 py-1 text-xs">
-            {"Legislation"}
-          </div>
+          <div className="rounded bg-zinc-600 px-2 py-1 text-xs">{docType}</div>
         </div>
 
         <div className="p-4">
@@ -435,11 +623,19 @@ const DocumentCard = ({ document }) => {
           </div>
         </div>
 
-        <div className="bg-zinc-900 p-2 text-center text-xs text-gray-400">
-          <span>PDF </span>
+        <div className="pdf-link bg-zinc-900 p-2 text-center text-xs text-gray-400">
+          <a
+            href={documentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-blue-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            View PDF
+          </a>
         </div>
       </div>
-    </a>
+    </div>
   );
 };
 
