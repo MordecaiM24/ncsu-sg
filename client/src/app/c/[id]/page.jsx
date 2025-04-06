@@ -104,7 +104,6 @@ function ChatUI() {
     window.sessionStorage.removeItem("type");
 
     setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleSubmit() {
@@ -116,10 +115,8 @@ function ChatUI() {
     if (docSearch) {
       await handleDocumentSearch(prompt, topK);
     } else if (activeDocIds.length > 0) {
-      // This is a follow-up question about specific documents
       await sendDocumentQuestion(prompt, activeDocIds);
     } else {
-      // General question
       await sendToClaude(prompt);
     }
 
@@ -128,7 +125,6 @@ function ChatUI() {
 
   async function handleDocumentSearch(query, top_k) {
     setDocSearch(false);
-    // Reset active documents when starting a new search
     setActiveDocIds([]);
 
     try {
@@ -145,7 +141,6 @@ function ChatUI() {
 
       const response = await res.json();
 
-      // Store documents if we got summaries
       if (response.type === "summaries" && response.results) {
         setSavedDocuments((prev) => [...prev, ...response.results]);
       }
@@ -229,7 +224,6 @@ function ChatUI() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: [{ role: "user", content: query }],
-            // Don't include doc_id for general questions
           }),
         },
       );
@@ -261,9 +255,7 @@ function ChatUI() {
     }
   }
 
-  // Handle selecting a document to ask questions about
   function handleSelectDocument(docId) {
-    // Toggle document selection
     setActiveDocIds((prev) => {
       if (prev.includes(docId)) {
         return prev.filter((id) => id !== docId);
@@ -273,7 +265,6 @@ function ChatUI() {
     });
   }
 
-  // Handle going back to general questions
   function handleClearActiveDocs() {
     setActiveDocIds([]);
   }
@@ -325,7 +316,7 @@ function ChatUI() {
             <AssistantMessage
               content={message.content}
               documents={savedDocuments}
-              activeDocIds={activeDocIds} // added this line
+              activeDocIds={activeDocIds}
               onSelectDocument={handleSelectDocument}
               key={idx}
             />
@@ -415,12 +406,7 @@ function UserMessage({ content }) {
   );
 }
 
-function AssistantMessage({
-  content,
-  documents,
-  activeDocIds,
-  onSelectDocument,
-}) {
+function AssistantMessage({ content, activeDocIds, onSelectDocument }) {
   const isJsonContent = typeof content === "object" && content !== null;
   const isLoadingMessage =
     content === "Getting more information to answer your question...\n\n" ||
@@ -440,7 +426,6 @@ function AssistantMessage({
     );
   }
 
-  // Handle summary search results
   if (isJsonContent && content.type === "summaries" && content.results) {
     return (
       <div className="max-w-full rounded p-4 text-white">
@@ -463,7 +448,6 @@ function AssistantMessage({
     );
   }
 
-  // Handle chunk search results (document-specific)
   if (isJsonContent && content.type === "chunks" && content.chunks) {
     return (
       <div className="max-w-full rounded p-4 text-white">
@@ -486,7 +470,6 @@ function AssistantMessage({
     );
   }
 
-  // Display old-style result format for backward compatibility
   if (isJsonContent && content.result) {
     return (
       <div className="max-w-full rounded p-4 text-white">
@@ -544,7 +527,6 @@ function AssistantMessage({
 }
 
 const DocumentCard = ({ document, activeDocIds = [], onSelect }) => {
-  // Support both new and old API response formats
   const id = document.id;
   const metadata = document.metadata;
   const page_content = document.page_content || document.summary || "";
@@ -565,7 +547,6 @@ const DocumentCard = ({ document, activeDocIds = [], onSelect }) => {
     : [];
 
   const handleClick = (e) => {
-    // If user clicks on PDF link, don't trigger document selection
     if (e.target.closest(".pdf-link")) {
       return;
     }
@@ -573,10 +554,8 @@ const DocumentCard = ({ document, activeDocIds = [], onSelect }) => {
     onSelect(id);
   };
 
-  // Check if this document is currently active/selected
   const isActive = activeDocIds.includes(id);
 
-  // Determine document type display - keeping only Legislation active
   const docType = "Legislation";
 
   return (
