@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import MobileModal from "@/components/mobile-modal";
+import Logo from "@/components/logo";
 import { ThemeProvider } from "@/components/theme-provider";
+import Link from "next/link";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -37,8 +38,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {/* <Logo /> */}
-          <MobileModal />
+          <Link href="/">
+            <Logo />
+          </Link>
           {children}
         </ThemeProvider>
       </body>
